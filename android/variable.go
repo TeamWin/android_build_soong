@@ -149,6 +149,16 @@ type variableProperties struct {
 			Srcs         []string `android:"arch_variant"`
 			Exclude_srcs []string `android:"arch_variant"`
 		} `android:"arch_variant"`
+
+		Device_support_hwfde struct {
+			Cflags []string
+			Header_libs  []string
+			Shared_libs  []string
+		}
+
+		Device_support_hwfde_perf struct {
+			Cflags []string
+		}
 	} `android:"arch_variant"`
 }
 
@@ -222,6 +232,8 @@ type productVariables struct {
 
 	AppsDefaultVersionName *string `json:",omitempty"`
 
+	Device_support_hwfde       *bool `json:",omitempty"`
+	Device_support_hwfde_perf  *bool `json:",omitempty"`
 	Allow_missing_dependencies   *bool `json:",omitempty"`
 	Unbundled_build              *bool `json:",omitempty"`
 	Unbundled_build_apps         *bool `json:",omitempty"`
