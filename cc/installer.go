@@ -72,8 +72,12 @@ func (installer *baseInstaller) installDir(ctx ModuleContext) android.OutputPath
 	if installer.location == InstallInData && ctx.useVndk() {
 		dir = filepath.Join(dir, "vendor")
 	}
+	if ctx.InstallInRecovery() {
+		return android.PathForModuleInstall(ctx, string("sbin"))
+	}
 	return android.PathForModuleInstall(ctx, dir, installer.subDir,
 		installer.relativeInstallPath(), installer.relative)
+
 }
 
 func (installer *baseInstaller) install(ctx ModuleContext, file android.Path) {
