@@ -437,6 +437,11 @@ func (binary *binaryDecorator) installSymlinkToRuntimeApex(ctx ModuleContext, fi
 }
 
 func (binary *binaryDecorator) install(ctx ModuleContext, file android.Path) {
+	// <recovery>/bin is a symlink to /system/bin. Recovery binaries are all in /sbin.
+	if ctx.inRecovery() {
+		binary.baseInstaller.dir = "sbin"
+	}
+
 	// Bionic binaries (e.g. linker) is installed to the bootstrap subdirectory.
 	// The original path becomes a symlink to the corresponding file in the
 	// runtime APEX.
