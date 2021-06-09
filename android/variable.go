@@ -102,6 +102,7 @@ type variableProperties struct {
 			Enabled *bool `android:"arch_variant"`
 		} `android:"arch_variant"`
 
+		Twrp android.Product_variables
 		Uml struct {
 			Cppflags []string
 		}
