@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "ef5088eb_2ef32d1e",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 938
+      },
+      "writtenOn": "2022-10-11T10:07:56Z",
+      "side": 1,
+      "message": "Tested and working fine here.\n\nThis commit has been used in many ROMs right now.",
+      "revId": "6c882bd2e93478b876c08bb337996f4c87a6e927",
+      "serverId": "9c1c7d72-6534-4d44-b0ea-39f63e804833"
+    }
+  ]
+}
