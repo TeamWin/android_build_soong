@@ -257,6 +257,14 @@ func (r *ravenwoodLibgroup) GenerateAndroidBuildActions(ctx android.ModuleContex
 	installPath := android.PathForModuleInstall(ctx, r.BaseModuleName())
 	for _, lib := range r.ravenwoodLibgroupProperties.Libs {
 		libModule := ctx.GetDirectDepWithTag(lib, ravenwoodLibContentTag)
+		if libModule == nil {
+			if ctx.Config().AllowMissingDependencies() {
+				ctx.AddMissingDependencies([]string{lib})
+			} else {
+				ctx.PropertyErrorf("lib", "missing dependency %q", lib)
+			}
+			continue
+		}
 		libJar := android.OutputFileForModule(ctx, libModule, "")
 		ctx.InstallFile(installPath, lib+".jar", libJar)
 	}
