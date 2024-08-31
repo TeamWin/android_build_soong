@@ -19,7 +19,7 @@ func init() {
 }
 
 func registerAllTeamBuildComponents(ctx RegistrationContext) {
-	ctx.RegisterParallelSingletonType("all_teams", AllTeamsFactory)
+	ctx.RegisterSingletonType("all_teams", AllTeamsFactory)
 }
 
 // For each module, list the team or the bpFile the module is defined in.
