@@ -2211,11 +2211,6 @@ func (c *Module) deps(ctx DepsContext) Deps {
 	deps.HeaderLibs = android.LastUniqueStrings(deps.HeaderLibs)
 	deps.RuntimeLibs = android.LastUniqueStrings(deps.RuntimeLibs)
 
-	for _, lib := range deps.ReexportSharedLibHeaders {
-		if !inList(lib, deps.SharedLibs) {
-			ctx.PropertyErrorf("export_shared_lib_headers", "Shared library not in shared_libs: '%s'", lib)
-		}
-	}
 
 	for _, lib := range deps.ReexportStaticLibHeaders {
 		if !inList(lib, deps.StaticLibs) && !inList(lib, deps.WholeStaticLibs) {
