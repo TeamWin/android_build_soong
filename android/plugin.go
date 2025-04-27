@@ -68,6 +68,10 @@ var allowedPluginsByName = map[string]bool{
 	"treble_report_module":                   true,
 	"vintf-compatibility-matrix-soong-rules": true,
 	"xsdc-soong-rules":                       true,
+	"soong-libaosprecovery_defaults":	  true,
+	"soong-libguitwrp_defaults":		  true,
+	"soong-libminuitwrp_defaults":		  true,
+	"soong-vold_defaults":			  true,
 }
 
 var internalPluginsPaths = []string{
