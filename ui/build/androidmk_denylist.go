@@ -60,7 +60,10 @@ var androidmk_denylist []string = []string{
 }
 
 var androidmk_allowlist []string = []string{
+	"art/Android.mk",
 	"bootable/deprecated-ota/updater/Android.mk",
+	"tools/vendor/google_prebuilts/arc/Android.mk",
+	"bootable/recovery/Android.mk",
 }
 
 func getAllLines(ctx Context, filename string) []string {
@@ -78,7 +81,8 @@ func getAllLines(ctx Context, filename string) []string {
 func blockAndroidMks(ctx Context, androidMks []string) {
 	allowlist_files := []string{
 		"vendor/google/build/androidmk/allowlist.txt",
-		"device/google/harriet/androidmk/allowlist.txt",
+		"device/google/clockwork/build/androidmk/allowlist.txt",
+		"device/google/sdv/androidmk/allowlist.txt",
 	}
 	for _, allowlist_file := range allowlist_files {
 		allowlist := getAllLines(ctx, allowlist_file)
@@ -100,7 +104,7 @@ func blockAndroidMks(ctx Context, androidMks []string) {
 	}
 }
 
-var ignore_androidmks []string = []string{
+var external_androidmks []string = []string{
 	// The Android.mk files in these directories are for NDK build system.
 	"external/fmtlib/",
 	"external/google-breakpad/",
@@ -122,10 +126,17 @@ var ignore_androidmks []string = []string{
 	"external/proguard/",
 	"external/swig/",
 	"toolchain/",
-	"vendor/google/graphics/",
+}
+
+var art_androidmks = []string{
+	//"art/",
 }
 
 func ignoreSomeAndroidMks(androidMks []string) (filtered []string) {
+	ignore_androidmks := make([]string, 0, len(external_androidmks)+len(art_androidmks))
+	ignore_androidmks = append(ignore_androidmks, external_androidmks...)
+	ignore_androidmks = append(ignore_androidmks, art_androidmks...)
+
 	shouldKeep := func(androidmk string) bool {
 		for _, prefix := range ignore_androidmks {
 			if strings.HasPrefix(androidmk, prefix) {
