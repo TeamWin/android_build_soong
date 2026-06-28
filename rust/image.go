@@ -236,6 +236,11 @@ func (mod *Module) ImageMutatorBegin(mctx android.ImageInterfaceContext) {
 		mctx.PropertyErrorf("double_loadable",
 			"Rust modules do not yet support double loading")
 	}
+	if Bool(mod.Properties.Vendor_ramdisk_available) {
+		if lib, ok := mod.compiler.(libraryInterface); !ok || (ok && lib.buildShared()) {
+			mctx.PropertyErrorf("vendor_ramdisk_available", "cannot be set for rust_ffi or rust_ffi_shared modules.")
+		}
+	}
 
 	cc.MutateImage(mctx, mod)
 

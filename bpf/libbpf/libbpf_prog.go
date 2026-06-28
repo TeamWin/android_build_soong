@@ -25,7 +25,6 @@ import (
 	"android/soong/genrule"
 
 	"github.com/google/blueprint"
-	"github.com/google/blueprint/proptools"
 )
 
 type libbpfProgDepType struct {
@@ -53,7 +52,7 @@ var (
 	libbpfProgStripRule = pctx.AndroidStaticRule("libbpfProgStripRule",
 		blueprint.RuleParams{
 			Command: `$stripCmd --strip-unneeded --remove-section=.rel.BTF ` +
-				`--remove-section=.rel.BTF.ext $in -o $out`,
+				`--remove-section=.rel.BTF.ext --remove-section=.BTF.ext $in -o $out`,
 			CommandDeps: []string{"$stripCmd"},
 		},
 		"stripCmd")
@@ -94,12 +93,6 @@ type LibbpfProgProperties struct {
 
 	// optional subdirectory under which this module is installed into.
 	Relative_install_path string
-
-	// whether this module is specific to an SoC (System-On-a-Chip).
-	// When set to true, it is installed into /vendor.
-	Vendor *bool
-
-	VendorInternal bool `blueprint:"mutated"`
 }
 
 type libbpfProg struct {
@@ -116,7 +109,7 @@ func (libbpf *libbpfProg) ImageMutatorBegin(ctx android.ImageInterfaceContext) {
 func (libbpf *libbpfProg) ImageMutatorSupported() bool { return true }
 
 func (libbpf *libbpfProg) VendorVariantNeeded(ctx android.ImageInterfaceContext) bool {
-	return proptools.Bool(libbpf.properties.Vendor)
+	return false
 }
 
 func (libbpf *libbpfProg) ProductVariantNeeded(ctx android.ImageInterfaceContext) bool {
@@ -124,7 +117,7 @@ func (libbpf *libbpfProg) ProductVariantNeeded(ctx android.ImageInterfaceContext
 }
 
 func (libbpf *libbpfProg) CoreVariantNeeded(ctx android.ImageInterfaceContext) bool {
-	return !proptools.Bool(libbpf.properties.Vendor)
+	return true
 }
 
 func (libbpf *libbpfProg) RamdiskVariantNeeded(ctx android.ImageInterfaceContext) bool {
@@ -148,7 +141,6 @@ func (libbpf *libbpfProg) ExtraImageVariations(ctx android.ImageInterfaceContext
 }
 
 func (libbpf *libbpfProg) SetImageVariation(ctx android.ImageInterfaceContext, variation string) {
-	libbpf.properties.VendorInternal = variation == "vendor"
 }
 
 func (libbpf *libbpfProg) DepsMutator(ctx android.BottomUpMutatorContext) {
@@ -183,12 +175,12 @@ func (libbpf *libbpfProg) GenerateAndroidBuildActions(ctx android.ModuleContext)
 		cflags = append(cflags, "-fdebug-prefix-map=/proc/self/cwd=")
 	}
 
-	ctx.VisitDirectDepsProxy(func(dep android.ModuleProxy) {
+	ctx.VisitDirectDeps(func(dep android.Module) {
 		depTag := ctx.OtherModuleDependencyTag(dep)
 		if depTag == libbpfProgDepTag {
-			if info, ok := android.OtherModuleProvider(ctx, dep, android.GeneratedSourceInfoProvider); ok {
-				cFlagsDeps = append(cFlagsDeps, info.GeneratedDeps...)
-				dirs := info.GeneratedHeaderDirs
+			if genRule, ok := dep.(genrule.SourceFileGenerator); ok {
+				cFlagsDeps = append(cFlagsDeps, genRule.GeneratedDeps()...)
+				dirs := genRule.GeneratedHeaderDirs()
 				for _, dir := range dirs {
 					cflags = append(cflags, "-I "+dir.String())
 				}
@@ -199,7 +191,6 @@ func (libbpf *libbpfProg) GenerateAndroidBuildActions(ctx android.ModuleContext)
 		} else if depTag == cc.HeaderDepTag() {
 			depExporterInfo, _ := android.OtherModuleProvider(ctx, dep, cc.FlagExporterInfoProvider)
 			for _, dir := range depExporterInfo.IncludeDirs {
-				cFlagsDeps = append(cFlagsDeps, depExporterInfo.Deps...)
 				cflags = append(cflags, "-I "+dir.String())
 			}
 		}
@@ -251,16 +242,6 @@ func (libbpf *libbpfProg) GenerateAndroidBuildActions(ctx android.ModuleContext)
 	}
 
 	ctx.SetOutputFiles(libbpf.objs, "")
-
-	moduleInfoJSON := ctx.ModuleInfoJSON()
-	moduleInfoJSON.Class = []string{"FAKE"}
-	moduleInfoJSON.SystemSharedLibs = []string{"none"}
-	moduleInfoJSON.ExtraRequired = []string{}
-	name := libbpf.ModuleBase.Name()
-	for _, obj := range libbpf.objs {
-		objName := name + "_" + obj.Base()
-		moduleInfoJSON.ExtraRequired = append(moduleInfoJSON.ExtraRequired, objName)
-	}
 }
 
 func (libbpf *libbpfProg) AndroidMk() android.AndroidMkData {
@@ -271,11 +252,7 @@ func (libbpf *libbpfProg) AndroidMk() android.AndroidMkData {
 			fmt.Fprintln(w, "LOCAL_PATH :=", moduleDir)
 			fmt.Fprintln(w)
 			var localModulePath string
-			if libbpf.properties.VendorInternal {
-				localModulePath = "LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR_ETC)/bpf"
-			} else {
-				localModulePath = "LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/bpf"
-			}
+			localModulePath = "LOCAL_MODULE_PATH := $(TARGET_OUT_ETC)/bpf"
 			if len(libbpf.properties.Relative_install_path) > 0 {
 				localModulePath += "/" + libbpf.properties.Relative_install_path
 			}

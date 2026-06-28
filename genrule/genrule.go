@@ -21,6 +21,7 @@ package genrule
 import (
 	"fmt"
 	"io"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -111,8 +112,8 @@ func (t hostToolDependencyTag) AllowDisabledModuleDependency(target android.Modu
 
 func (t hostToolDependencyTag) AllowDisabledModuleDependencyProxy(
 	ctx android.OtherModuleProviderContext, target android.ModuleProxy) bool {
-	return android.OtherModuleProviderOrDefault(
-		ctx, target, android.PrebuiltInfoProvider).ReplacedByPrebuilt
+	return android.OtherModulePointerProviderOrDefault(
+		ctx, target, android.CommonModuleInfoProvider).ReplacedByPrebuilt
 }
 
 var _ android.AllowDisabledModuleDependency = (*hostToolDependencyTag)(nil)
@@ -156,12 +157,6 @@ type generatorProperties struct {
 	// Same as srcs, but will add dependencies on modules via a common_os os variation.
 	Common_os_srcs proptools.Configurable[[]string] `android:"path_common_os"`
 
-	// Same as srcs, but will add dependencies on modules via for host os variation.
-	Host_first_srcs proptools.Configurable[[]string] `android:"path_host_first"`
-
-	// Same as srcs, but will add dependencies on modules via for host 2nd arch os variation.
-	Host_second_srcs proptools.Configurable[[]string] `android:"path_host_second"`
-
 	// input files to exclude
 	Exclude_srcs []string `android:"path,arch_variant"`
 
@@ -182,19 +177,6 @@ type generatorProperties struct {
 	// number. Prefer using libbuildversion via the use_version_lib property on
 	// cc modules.
 	Uses_order_only_build_number_file *bool
-
-	// When set to true, an additional $(build_date_file) label will be available
-	// to use in the cmd. This will be the location of a text file containing the
-	// build date. The dependency on this file will be "order-only", meaning that
-	// the genrule will not rerun when only this file changes, to avoid rerunning
-	// the genrule every build, because the build date changes every build.
-	// This also means that you should not attempt to consume the build date from
-	// the result of this genrule in another build rule. If you do, the build date
-	// in the second build rule will be stale when the second build rule rebuilds
-	// but this genrule does not. Only certain allowlisted modules are allowed to
-	// use this property, usages of the build date should be kept to the absolute
-	// minimum.
-	Uses_order_only_build_date_file *bool
 }
 
 type Module struct {
@@ -237,7 +219,7 @@ type generateTask struct {
 	in          android.Paths
 	out         android.WritablePaths
 	copyTo      android.WritablePaths // For gensrcs to set on gensrcsMerge rule.
-	genDir      android.ModuleGenPath
+	genDir      android.WritablePath
 	extraInputs map[string][]string
 
 	cmd string
@@ -282,7 +264,6 @@ func toolDepsMutator(ctx android.BottomUpMutatorContext) {
 }
 
 var buildNumberAllowlistKey = android.NewOnceKey("genruleBuildNumberAllowlistKey")
-var buildDateAllowlistKey = android.NewOnceKey("genruleBuildDateAllowlistKey")
 
 // This allowlist should be kept to the bare minimum, it's
 // intended for things that existed before the build number
@@ -299,56 +280,8 @@ func isModuleInBuildNumberAllowlist(ctx android.ModuleContext) bool {
 			"build/soong/tests:gen",
 			"hardware/google/camera/common/hal/aidl_service:aidl_camera_build_version",
 			"tools/tradefederation/core:tradefed_zip",
-			"trusty/vendor/google/aosp/scripts:trusty_desktop_test_vm_arm64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_desktop_test_vm_x86_64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_desktop_vm_arm64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_desktop_vm_x86_64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_security_vm_arm64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_security_vm_x86_64.elf",
-			"trusty/vendor/google/aosp/scripts:trusty_tee_package",
-			"trusty/vendor/google/aosp/scripts:trusty_test_vm_arm64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_test_vm_os_arm64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_test_vm_os_x86_64.elf",
-			"trusty/vendor/google/aosp/scripts:trusty_test_vm_x86_64.elf",
-			"trusty/vendor/google/proprietary/scripts:trusty_tee_package_goog",
-			"trusty/vendor/google/proprietary/scripts:trusty_widevine_vm_arm64.bin",
-			"trusty/vendor/google/proprietary/scripts:trusty_widevine_vm_x86_64.elf",
 			"vendor/google/services/LyricCameraHAL/src/apex:com.google.pixel.camera.hal.manifest",
 			"vendor/google_tradefederation/core:gen_google_tradefed_zip",
-			// go/keep-sorted end
-		}
-		allowlistMap := make(map[string]bool, len(allowlist))
-		for _, a := range allowlist {
-			allowlistMap[a] = true
-		}
-		return allowlistMap
-	}).(map[string]bool)
-
-	_, ok := allowlist[ctx.ModuleDir()+":"+ctx.ModuleName()]
-	return ok
-}
-
-func isModuleInBuildDateAllowlist(ctx android.ModuleContext) bool {
-	allowlist := ctx.Config().Once(buildDateAllowlistKey, func() interface{} {
-		// Define the allowlist as a list and then copy it into a map so that
-		// gofmt doesn't change unnecessary lines trying to align the values of the map.
-		allowlist := []string{
-			// go/keep-sorted start
-			"build/soong/tests:gen",
-			"trusty/vendor/google/aosp/scripts:trusty_desktop_test_vm_arm64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_desktop_test_vm_x86_64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_desktop_vm_arm64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_desktop_vm_x86_64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_security_vm_arm64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_security_vm_x86_64.elf",
-			"trusty/vendor/google/aosp/scripts:trusty_tee_package",
-			"trusty/vendor/google/aosp/scripts:trusty_test_vm_arm64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_test_vm_os_arm64.bin",
-			"trusty/vendor/google/aosp/scripts:trusty_test_vm_os_x86_64.elf",
-			"trusty/vendor/google/aosp/scripts:trusty_test_vm_x86_64.elf",
-			"trusty/vendor/google/proprietary/scripts:trusty_tee_package_goog",
-			"trusty/vendor/google/proprietary/scripts:trusty_widevine_vm_arm64.bin",
-			"trusty/vendor/google/proprietary/scripts:trusty_widevine_vm_x86_64.elf",
 			// go/keep-sorted end
 		}
 		allowlistMap := make(map[string]bool, len(allowlist))
@@ -521,8 +454,6 @@ func (g *Module) generateCommonBuildActions(ctx android.ModuleContext) {
 	srcFiles = append(srcFiles, addLabelsForInputs("device_first_srcs", g.properties.Device_first_srcs.GetOrDefault(ctx, nil), nil)...)
 	srcFiles = append(srcFiles, addLabelsForInputs("device_common_srcs", g.properties.Device_common_srcs.GetOrDefault(ctx, nil), nil)...)
 	srcFiles = append(srcFiles, addLabelsForInputs("common_os_srcs", g.properties.Common_os_srcs.GetOrDefault(ctx, nil), nil)...)
-	srcFiles = append(srcFiles, addLabelsForInputs("host_first_src", g.properties.Host_first_srcs.GetOrDefault(ctx, nil), nil)...)
-	srcFiles = append(srcFiles, addLabelsForInputs("host_second_src", g.properties.Host_second_srcs.GetOrDefault(ctx, nil), nil)...)
 
 	var copyFrom android.Paths
 	var outputFiles android.WritablePaths
@@ -554,9 +485,7 @@ func (g *Module) generateCommonBuildActions(ctx android.ModuleContext) {
 		desc := "generate"
 		name := "generator"
 		if task.useNsjail {
-			rule = android.NewRuleBuilder(pctx, ctx).
-				Nsjail(task.genDir, android.PathForModuleOut(ctx, "nsjail_build_sandbox")).
-				DirDepsFile(task.genDir.Join(ctx, "dir_deps.d"))
+			rule = android.NewRuleBuilder(pctx, ctx).Nsjail(task.genDir, android.PathForModuleOut(ctx, "nsjail_build_sandbox"))
 			if task.keepGendir {
 				rule.NsjailKeepGendir()
 			}
@@ -573,8 +502,7 @@ func (g *Module) generateCommonBuildActions(ctx android.ModuleContext) {
 			manifestPath := android.PathForModuleOut(ctx, manifestName)
 
 			// Use a RuleBuilder to create a rule that runs the command inside an sbox sandbox.
-			rule = android.NewRuleBuilder(pctx, ctx).Sbox(task.genDir, manifestPath).SandboxInputs()
-			rule.DirDepsFile(task.genDir.Join(ctx, "dir_deps.d"))
+			rule = getSandboxedRuleBuilder(ctx, android.NewRuleBuilder(pctx, ctx).Sbox(task.genDir, manifestPath))
 		}
 		if Bool(g.properties.Write_if_changed) {
 			rule.Restat()
@@ -623,11 +551,6 @@ func (g *Module) generateCommonBuildActions(ctx android.ModuleContext) {
 					return reportError("to use the $(build_number_file) label, you must set uses_order_only_build_number_file: true")
 				}
 				return proptools.ShellEscape(cmd.PathForInput(ctx.Config().BuildNumberFile(ctx))), nil
-			case "build_date_file":
-				if !proptools.Bool(g.properties.Uses_order_only_build_date_file) {
-					return reportError("to use the $(build_date_file) label, you must set uses_order_only_build_date_file: true")
-				}
-				return proptools.ShellEscape(cmd.PathForInput(ctx.Config().BuildDateFile(ctx))), nil
 			default:
 				if strings.HasPrefix(name, "location ") {
 					label := strings.TrimSpace(strings.TrimPrefix(name, "location "))
@@ -680,15 +603,17 @@ func (g *Module) generateCommonBuildActions(ctx android.ModuleContext) {
 			}
 			cmd.OrderOnly(ctx.Config().BuildNumberFile(ctx))
 		}
-		if proptools.Bool(g.properties.Uses_order_only_build_date_file) {
-			if !isModuleInBuildDateAllowlist(ctx) {
-				ctx.ModuleErrorf("Only allowlisted modules may use uses_order_only_build_date_file: true")
-			}
-			cmd.OrderOnly(ctx.Config().BuildDateFile(ctx))
-		}
 
-		for _, input := range task.dirSrcs {
-			cmd.ImplicitDirectory(input)
+		if task.useNsjail {
+			for _, input := range task.dirSrcs {
+				cmd.ImplicitDirectory(input)
+				// TODO(b/375551969): remove glob
+				if paths, err := ctx.GlobWithDeps(filepath.Join(input.String(), "**/*"), nil); err == nil {
+					rule.NsjailImplicits(android.PathsForSource(ctx, paths))
+				} else {
+					ctx.PropertyErrorf("dir_srcs", "can't glob %q", input.String())
+				}
+			}
 		}
 
 		// Create the rule to run the genrule command inside sbox.
@@ -877,7 +802,7 @@ func NewGenSrcs() *Module {
 			// TODO(ccross): this RuleBuilder is a hack to be able to call
 			// rule.Command().PathForOutput.  Replace this with passing the rule into the
 			// generator.
-			rule := android.NewRuleBuilder(pctx, ctx).Sbox(genDir, nil).SandboxInputs()
+			rule := getSandboxedRuleBuilder(ctx, android.NewRuleBuilder(pctx, ctx).Sbox(genDir, nil))
 
 			for _, in := range shard {
 				outFile := android.GenPathWithExtAndTrimExt(ctx, finalSubDir, in, String(properties.Output_extension), String(properties.Trim_extension))
@@ -967,6 +892,10 @@ func NewGenRule() *Module {
 		useNsjail := Bool(properties.Use_nsjail)
 
 		dirSrcs := android.DirectoryPathsForModuleSrc(ctx, properties.Dir_srcs)
+		if len(dirSrcs) > 0 && !useNsjail {
+			ctx.PropertyErrorf("dir_srcs", "can't use dir_srcs if use_nsjail is false")
+			return nil
+		}
 
 		keepGendir := Bool(properties.Keep_gendir)
 		if keepGendir && !useNsjail {
@@ -1039,4 +968,11 @@ func DefaultsFactory(props ...interface{}) android.Module {
 	android.InitDefaultsModule(module)
 
 	return module
+}
+
+func getSandboxedRuleBuilder(ctx android.ModuleContext, r *android.RuleBuilder) *android.RuleBuilder {
+	if !ctx.DeviceConfig().GenruleSandboxing() {
+		return r.SandboxTools()
+	}
+	return r.SandboxInputs()
 }

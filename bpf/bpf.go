@@ -37,18 +37,19 @@ func init() {
 var (
 	pctx = android.NewPackageContext("android/soong/bpf")
 
-	ccRule = pctx.AndroidRemoteStaticRule("ccRule", android.RemoteRuleSupports{},
+	ccRule = pctx.AndroidRemoteStaticRule("ccRule", android.RemoteRuleSupports{Goma: true},
 		blueprint.RuleParams{
 			Depfile:     "${out}.d",
 			Deps:        blueprint.DepsGCC,
-			Command:     "$relPwd $ccCmd --target=bpf -mcpu=v1 -c $cFlags -MD -MF ${out}.d -o $out $in",
+			Command:     "$relPwd $ccCmd --target=bpf -c $cFlags -MD -MF ${out}.d -o $out $in",
 			CommandDeps: []string{"$ccCmd"},
 		},
 		"ccCmd", "cFlags")
 
 	stripRule = pctx.AndroidStaticRule("stripRule",
 		blueprint.RuleParams{
-			Command:     `$stripCmd -g $in -o $out`,
+			Command: `$stripCmd --strip-unneeded --remove-section=.rel.BTF ` +
+				`--remove-section=.rel.BTF.ext --remove-section=.BTF.ext $in -o $out`,
 			CommandDeps: []string{"$stripCmd"},
 		},
 		"stripCmd")
@@ -114,9 +115,9 @@ type bpf struct {
 
 var _ android.ImageInterface = (*bpf)(nil)
 
-func (bpf *bpf) ImageMutatorSupported() bool { return true }
-
 func (bpf *bpf) ImageMutatorBegin(ctx android.ImageInterfaceContext) {}
+
+func (bpf *bpf) ImageMutatorSupported() bool { return true }
 
 func (bpf *bpf) VendorVariantNeeded(ctx android.ImageInterfaceContext) bool {
 	return proptools.Bool(bpf.properties.Vendor)
@@ -171,6 +172,7 @@ func (bpf *bpf) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 		// The architecture doesn't matter here, but asm/types.h is included by linux/types.h.
 		"-isystem bionic/libc/kernel/uapi/asm-arm64",
 		"-isystem bionic/libc/kernel/android/uapi",
+		"-I       packages/modules/Connectivity/bpf/headers/include",
 		// TODO(b/149785767): only give access to specific file with AID_* constants
 		"-I       system/core/libcutils/include",
 		"-I " + ctx.ModuleDir(),
@@ -241,16 +243,6 @@ func (bpf *bpf) GenerateAndroidBuildActions(ctx android.ModuleContext) {
 	})
 
 	ctx.SetOutputFiles(bpf.objs, "")
-
-	moduleInfoJSON := ctx.ModuleInfoJSON()
-	moduleInfoJSON.Class = []string{"FAKE"}
-	moduleInfoJSON.SystemSharedLibs = []string{"none"}
-	moduleInfoJSON.ExtraRequired = []string{}
-	name := bpf.ModuleBase.Name()
-	for _, obj := range bpf.objs {
-		objName := name + "_" + obj.Base()
-		moduleInfoJSON.ExtraRequired = append(moduleInfoJSON.ExtraRequired, objName)
-	}
 }
 
 func (bpf *bpf) AndroidMk() android.AndroidMkData {

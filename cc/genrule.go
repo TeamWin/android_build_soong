@@ -119,3 +119,88 @@ func (g *GenruleExtraProperties) ExtraImageVariations(ctx android.ImageInterface
 
 func (g *GenruleExtraProperties) SetImageVariation(ctx android.ImageInterfaceContext, variation string) {
 }
+
+// cc_genrule is a genrule that can depend on other cc_* objects.
+// The cmd may be run multiple times, once for each of the different arch/etc
+// variations.  The following environment variables will be set when the command
+// execute:
+//
+//	CC_ARCH           the name of the architecture the command is being executed for
+//
+//	CC_MULTILIB       "lib32" if the architecture the command is being executed for is 32-bit,
+//	                  "lib64" if it is 64-bit.
+//
+//	CC_NATIVE_BRIDGE  the name of the subdirectory that native bridge libraries are stored in if
+//	                  the architecture has native bridge enabled, empty if it is disabled.
+//
+//	CC_OS             the name of the OS the command is being executed for.
+func GenRuleFactory() android.Module {
+	module := genrule.NewGenRule()
+
+	extra := &GenruleExtraProperties{}
+	module.Extra = extra
+	module.ImageInterface = extra
+	module.CmdModifier = genruleCmdModifier
+	module.AddProperties(module.Extra)
+
+	android.InitAndroidArchModule(module, android.HostAndDeviceSupported, android.MultilibBoth)
+
+	android.InitApexModule(module)
+
+	android.InitDefaultableModule(module)
+
+	return module
+}
+
+func genruleCmdModifier(ctx android.ModuleContext, cmd string) string {
+	target := ctx.Target()
+	arch := target.Arch.ArchType
+	osName := target.Os.Name
+	return fmt.Sprintf("CC_ARCH=%s CC_NATIVE_BRIDGE=%s CC_MULTILIB=%s CC_OS=%s && %s",
+		arch.Name, target.NativeBridgeRelativePath, arch.Multilib, osName, cmd)
+}
+
+var _ android.ImageInterface = (*GenruleExtraProperties)(nil)
+
+func (g *GenruleExtraProperties) ImageMutatorBegin(ctx android.ImageInterfaceContext) {}
+
+func (g *GenruleExtraProperties) ImageMutatorSupported() bool {
+	return true
+}
+
+func (g *GenruleExtraProperties) VendorVariantNeeded(ctx android.ImageInterfaceContext) bool {
+	return Bool(g.Vendor_available) || Bool(g.Odm_available) || ctx.SocSpecific() || ctx.DeviceSpecific()
+}
+
+func (g *GenruleExtraProperties) ProductVariantNeeded(ctx android.ImageInterfaceContext) bool {
+	return Bool(g.Product_available) || ctx.ProductSpecific()
+}
+
+func (g *GenruleExtraProperties) CoreVariantNeeded(ctx android.ImageInterfaceContext) bool {
+	return !(ctx.SocSpecific() || ctx.DeviceSpecific() || ctx.ProductSpecific())
+}
+
+func (g *GenruleExtraProperties) RamdiskVariantNeeded(ctx android.ImageInterfaceContext) bool {
+	return Bool(g.Ramdisk_available)
+}
+
+func (g *GenruleExtraProperties) VendorRamdiskVariantNeeded(ctx android.ImageInterfaceContext) bool {
+	return Bool(g.Vendor_ramdisk_available)
+}
+
+func (g *GenruleExtraProperties) DebugRamdiskVariantNeeded(ctx android.ImageInterfaceContext) bool {
+	return false
+}
+
+func (g *GenruleExtraProperties) RecoveryVariantNeeded(ctx android.ImageInterfaceContext) bool {
+	// If the build is using a snapshot, the recovery variant under AOSP directories
+	// is not needed.
+	return Bool(g.Recovery_available)
+}
+
+func (g *GenruleExtraProperties) ExtraImageVariations(ctx android.ImageInterfaceContext) []string {
+	return nil
+}
+
+func (g *GenruleExtraProperties) SetImageVariation(ctx android.ImageInterfaceContext, variation string) {
+}

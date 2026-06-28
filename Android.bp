@@ -161,22 +161,6 @@ cc_defaults {
     defaults_visibility: ["//visibility:public"],
 }
 
-rust_defaults {
-    name: "rust_baremetal_defaults",
-    arch: {
-        arm64: {
-            flags: [
-                // There is no Rust flag that says "use baseline instruction set",
-                // so we disable SVE specifically. This can be extended with more
-                // problematic target features from rust/config/arm64_device.go
-                // as needed.
-                "-C target-feature=-sve2",
-            ],
-        },
-    },
-    defaults_visibility: ["//visibility:public"],
-}
-
 product_config {
     name: "product_config",
     visibility: [
@@ -239,9 +223,6 @@ build_prop {
         "//bootable/recovery/tests/ota",
     ],
 }
-
-build_prop {
-    name: "odm-build.prop",
     stem: "build.prop",
     device_specific: true,
     product_config: ":product_config",
@@ -299,6 +280,22 @@ all_apex_certs {
         "//cts/tests/tests/security",
         "//cts/hostsidetests/appsecurity",
     ],
+}
+
+rust_defaults {
+    name: "rust_baremetal_defaults",
+    arch: {
+        arm64: {
+            flags: [
+                // There is no Rust flag that says "use baseline instruction set",
+                // so we disable SVE specifically. This can be extended with more
+                // problematic target features from rust/config/arm64_device.go
+                // as needed.
+                "-C target-feature=-sve2",
+            ],
+        },
+    },
+    defaults_visibility: ["//visibility:public"],
 }
 
 system_dev_certificate {
